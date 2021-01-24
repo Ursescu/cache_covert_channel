@@ -1,7 +1,7 @@
 CFLAGS = -std=c++14 -g -lpthread -O2
 CC = g++
 
-SOURCES = ll/lll.cc ll/ull.cc phy/phy.cc
+SOURCES = ll/lll.cc ll/ull.cc ll/ll.cc phy/phy.cc
 OBJECTS = $(SOURCES:.cc=.o)
 
 INCLUDES = -Ill -Iphy -Iutils

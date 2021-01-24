@@ -14,9 +14,9 @@ int main(int argc, char **argv)
 
 	ll_dev dev;
 
-	init_ll_dev(dev, CacheConfig::CHANNEL_0, CacheConfig::CHANNEL_1);
+	ll_dev_init(dev, CacheConfig::CHANNEL_0, CacheConfig::CHANNEL_1);
 
-	lll_run(dev);
+	lll_start(dev);
 
 	ll_pdu recv_pdu;
 	
@@ -26,7 +26,6 @@ int main(int argc, char **argv)
 
 		ll_pdu send_pdu;
 		send_pdu.seq = count;
-		send_pdu.crc = 30U;
 		send_pdu.type = PDU_DATA_REQ;
 		send_pdu.data.clear();
 		send_pdu.data.emplace_back(1U);
@@ -36,6 +35,7 @@ int main(int argc, char **argv)
 		send_pdu.data.emplace_back(200U);
 		send_pdu.data.emplace_back(99U);
 
+		send_pdu.crc = ll_pdu_crc(send_pdu);
 
 		lll_send(dev, send_pdu);
 

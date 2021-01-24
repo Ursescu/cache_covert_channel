@@ -12,22 +12,11 @@
 #include <thread>
 
 #include "phy.hh"
-#include "ll.hh"
+#include "lll.hh"
 
 using namespace std::chrono;
 
-std::vector<BIT> LLConfig::start_seq = { 0, 1, 1, 1, 1, 1, 1, 0 };
-std::vector<BIT> LLConfig::end_seq = { 0, 1, 1, 1, 1, 1, 1, 0 };
-
-/* Automate the crc calculation */
-ll_pdu::ll_pdu(std::vector<uint8_t> &data, uint8_t seq) : data(data), seq(seq)
-{
-	this->crc = 0U;
-};
-
-ll_pdu::ll_pdu(std::vector<uint8_t> &data, uint8_t seq, uint8_t crc)
-	: data(data), seq(seq), crc(crc){};
-
+/* Function that will sync to wall clock time, configured by LLConfig SYNC_MASK and SYNC_US */
 static void sync(void)
 {
 	auto current = (duration_cast<microseconds>(
@@ -44,32 +33,6 @@ static void sync(void)
 	       current) {
 		; // Just wait here
 	}
-}
-
-static void calc_pdu_crc(ll_dev &dev, ll_pdu &pdu)
-{
-	uint8_t *buffer;
-	uint32_t size = 0U;
-
-	size += pdu.data.size();
-	/* CRC + SEQ */
-	size += 2U;
-
-	buffer = new uint8_t[size];
-
-	/* Populate buffer */
-	buffer[0U] = pdu.seq;
-	buffer[2U] = (uint8_t)pdu.type;
-	buffer[1U] = 0U; // No CRC
-
-	for (uint32_t i = 0; i < pdu.data.size(); i++) {
-		buffer[i + 3] = pdu.data[i];
-	}
-
-	/* Calculate CRC */
-	pdu.crc = CRC::Calculate(buffer, size, CRC::CRC_8());
-
-	delete buffer;
 }
 
 /* 
@@ -283,9 +246,9 @@ static bool send_prv(ll_dev &dev, ll_pdu &pdu)
 }
 
 /* RECV thread function */
-static void recv_thread(ll_dev &dev)
+static void recv_thread(ll_dev &dev, std::future<void> signal)
 {
-	while (true) {
+	while (signal.wait_for(std::chrono::milliseconds(0U)) == std::future_status::timeout) {
 		ll_pdu pdu;
 
 		/* Start by syncing to wall clock */
@@ -293,49 +256,49 @@ static void recv_thread(ll_dev &dev)
 
 		/* Recv pdu, push it to higher layer, use move semantic to pass the data */
 		if (recv_prv(dev, pdu)) {
-			dev.rx_queue.push(std::move(pdu));
+			dev.lll_rx_queue.push(std::move(pdu));
 		}
 	}
 }
 
-static void send_thread(ll_dev &dev)
+/* SEND thread function */
+static void send_thread(ll_dev &dev, std::future<void> signal)
 {
 	ll_pdu pdu;
 
-	dev.tx_queue.wait_pop(pdu);
-	while (pdu.type != PDU_EXIT) {
+	dev.lll_tx_queue.wait_pop(pdu);
+	while (signal.wait_for(std::chrono::milliseconds(0U)) == std::future_status::timeout) {
 		send_prv(dev, pdu);
 
-		dev.tx_queue.wait_pop(pdu);
+		dev.lll_tx_queue.wait_pop(pdu);
 	}
 }
 
-void init_ll_dev(ll_dev &dev, uint32_t send_channel, uint32_t recv_channel)
+void lll_init(ll_dev &dev)
 {
-	/* Set the seq number start */
-	dev.curr_seq = 0x01;
+	std::future<void> signal_rx = dev.lll_rx_thread_signal.get_future();
+	std::future<void> signal_tx = dev.lll_tx_thread_signal.get_future();
 
-	/* Init phy device */
-	init_phy_dev(dev.phy_config, send_channel, recv_channel);
-}
-
-void lll_run(ll_dev &dev)
-{
 	/* Start the threads */
-	dev.rx_thread = std::thread(recv_thread, std::ref(dev));
+	dev.lll_rx_thread =
+		std::thread(recv_thread, std::ref(dev), std::move(signal_rx));
 
-	dev.tx_thread = std::thread(send_thread, std::ref(dev));
+	dev.lll_tx_thread =
+		std::thread(send_thread, std::ref(dev), std::move(signal_tx));
 }
 
-void lll_stop(ll_dev &dev)
+void lll_clear(ll_dev &dev)
 {
-}
+	ll_pdu exit_pdu;
 
-void lll_wait_exit(ll_dev &dev)
-{
-	/* Now just wait here */
-	dev.tx_thread.join();
-	dev.rx_thread.join();
+	dev.lll_rx_thread_signal.set_value();
+	dev.lll_tx_thread_signal.set_value();
+
+	/* Send thread is blocked until receiving a pdu, send dummy pdu*/
+	lll_send(dev, exit_pdu);
+
+	dev.lll_tx_thread.join();
+	dev.lll_rx_thread.join();
 }
 
 bool lll_recv(ll_dev &dev, ll_pdu &pdu)
@@ -343,11 +306,8 @@ bool lll_recv(ll_dev &dev, ll_pdu &pdu)
 	ll_pdu local;
 	bool ret = false;
 
-	if (dev.rx_queue.try_pop(local)) {
-		pdu.crc = local.crc;
-		pdu.seq = local.seq;
-		pdu.type = local.type;
-		pdu.data = local.data;
+	if (dev.lll_rx_queue.try_pop(local)) {
+		pdu = local;
 		ret = true;
 	}
 
@@ -358,8 +318,8 @@ bool lll_send(ll_dev &dev, ll_pdu &pdu)
 {
 	bool ret = false;
 
-	if (dev.tx_queue.size() < LLConfig::MAX_TX_QUEUE_SIZE) {
-		dev.tx_queue.push(pdu);
+	if (dev.lll_tx_queue.size() < LLConfig::LLL_TX_QUEUE_SIZE) {
+		dev.lll_tx_queue.push(std::move(pdu));
 		ret = true;
 	}
 
