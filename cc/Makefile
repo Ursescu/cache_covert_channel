@@ -1,23 +1,26 @@
-CFLAGS=-std=c++11 -g
-CC=g++
+CFLAGS = -std=c++14 -g -lpthread -O2
+CC = g++
 
-TARGETS=receiver sender
+SOURCES = ll/lll.cc ll/ull.cc phy/phy.cc
+OBJECTS = $(SOURCES:.cc=.o)
+
+INCLUDES = -Ill -Iphy -Iutils
+BUILDDIR = build
+
+TARGETS = receiver sender
 
 all: receiver sender
 
-covert.o: %.o: %.cc %.hh
-	$(CC) $(CFLAGS) -c $<
-
 %.o: %.cc
-	$(CC) $(CFLAGS)  -c $< 
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-receiver: %:%.o covert.o
-	$(CC) $(CFLAGS) $^ -o $@
+receiver: %:%.o $(OBJECTS)
+	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
 
-sender: %:%.o covert.o
-	$(CC) $(CFLAGS) $^ -o $@
+sender: %:%.o $(OBJECTS)
+	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
 
 .PHONY:	clean
 
 clean:
-	rm *.o $(TARGETS) 
+	rm -rf *.o $(TARGETS) $(OBJECTS)

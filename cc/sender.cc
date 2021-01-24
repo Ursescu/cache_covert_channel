@@ -1,89 +1,68 @@
 #include <iostream>
 #include <bitset>
+#include <chrono>
+#include <thread>
 
-#include "covert.hh"
+#include "phy.hh"
+#include "ll.hh"
 
+using namespace std::chrono;
 
-void send_bit(SenderConfig &config, BIT bit) {
+int main(int argc, char **argv)
+{
+	std::cout << "Sender\n";
 
-    if (bit == 0)
-        send_zero(config);
-    else
-        send_one(config);
-}
+	ll_dev dev;
 
-// Entry point - test
-int main(int argc, char **argv) {
+	init_ll_dev(dev, CacheConfig::CHANNEL_0, CacheConfig::CHANNEL_1);
 
-    std::cout << "Sender" << std::endl;
-    // Configuration
+	lll_run(dev);
 
-    SenderConfig config;
+	ll_pdu recv_pdu;
+	
+	uint8_t count = 1;
 
-    std::cout << "Period " << std::dec << config.period << std::endl;
+	while(true) {
 
-    build_eviction_list(config);
-    uint32_t counter = 0;
-
-    std::cout << "Eviction list addresses:" << std::endl;
-
-    for (auto it = config.eviction_list.begin(); it != config.eviction_list.end(); it++, counter++) {
-
-        std::cout << counter << ": 0x" << std::hex << *it << std::dec<< std::endl;
-    }
-
-    // Listen
-
-    std::cout << "Send now. Limitation without 0 at the end of data!!!!" << std::endl;
-
-    std::string reading;
-    while(true) {
-        
-        std::vector<BIT> data;
-        bool validInput = true;
+		ll_pdu send_pdu;
+		send_pdu.seq = count;
+		send_pdu.crc = 30U;
+		send_pdu.type = PDU_DATA_REQ;
+		send_pdu.data.clear();
+		send_pdu.data.emplace_back(1U);
+		send_pdu.data.emplace_back(0U);
+		send_pdu.data.emplace_back(232U);
+		send_pdu.data.emplace_back(150U);
+		send_pdu.data.emplace_back(200U);
+		send_pdu.data.emplace_back(99U);
 
 
-        std::cout << "Send something (0|1):";
-        std::cin >> reading;
+		lll_send(dev, send_pdu);
 
-        for (char const &c: reading) {
-            if (c == '0')
-                data.emplace_back(0U);
-            else if (c == '1')
-                data.emplace_back(1U);
-            else {
-                validInput = false;
-                std::cout << "Invalid input, only 0 or 1" << std::endl;
-            }
-        }
+		count++;
 
-        if (!validInput)
-            continue;
+		if (count == 0xff) {
+			count = 1U;
+		}
 
-        std::cout << "Sending: ";
-        for (auto it = data.begin(); it != data.end(); it++) {
-            
-            std::cout << std::dec << (uint32_t)(*it) << " ";
-        }
-        std::cout << std::endl;
+		// std::this_thread::sleep_for(milliseconds(2000));
 
-        for(uint32_t i = 0; i < 100; i++) {
+		// if(lll_recv(dev, recv_pdu)) {
+		// 	std::cout << "Received pdu \n";
+		// 	std::cout << "Seq: " << static_cast<unsigned>(recv_pdu.seq) << "\n";
+		// 	std::cout << "Type: " << static_cast<unsigned>(recv_pdu.type) << "\n";
+		// 	std::cout << "Crc: " << static_cast<unsigned>(recv_pdu.crc) << "\n";
+		// 	std::cout << "Data: ";
+		// 	for (auto byte : recv_pdu.data) {
+		// 		std::cout << " " << static_cast<unsigned>(byte);
+		// 	}
+		// 	std::cout << "\n";
+		// }
+		std::this_thread::sleep_for(milliseconds(30));
+	}
 
-            for (auto it = ProtocolConfig::startSequence.begin(); it != ProtocolConfig::startSequence.end(); it++) {
-                send_bit(config, *it);
-            }
 
-            for (auto it = data.begin(); it != data.end(); it++) {
-                send_bit(config, *it);
-            }
+	lll_wait_exit(dev);
 
-            for (auto it = ProtocolConfig::endSequence.begin(); it != ProtocolConfig::endSequence.end(); it++) {
-                send_bit(config, *it);
-            }
-        }
-
-        std::cout << "Sender finished." << std::endl;
-    }
-
-    return 0;
+	return 0;
 }
