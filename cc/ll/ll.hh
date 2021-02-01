@@ -15,7 +15,7 @@
 
 struct LLConfig {
 	
-	static const uint32_t MAX_SDU_LEN = 10U;
+	static const uint32_t MAX_SDU_LEN = 3U;
 	static const uint32_t MIN_PDU_LEN = 3U;
 	static const uint32_t MAX_PDU_LEN = MAX_SDU_LEN + MIN_PDU_LEN;
 	static const uint32_t MAX_FRAME_BIT_LEN = (MAX_PDU_LEN + 2U) * BYTE_SIZE;
@@ -23,24 +23,26 @@ struct LLConfig {
 	static const uint32_t SYNC_US = 10000U;
 	static const uint32_t SYNC_MASK = 100000U;
 
-	static const uint32_t RETRIES = 5U;
-	static const uint32_t WINDOW_SIZE = 10U;
-	static const uint32_t SEGMENT_SIZE = WINDOW_SIZE * 2U;
+	static const uint32_t RETRY_TIMEOUT_US = 200000U;
 
-	static const uint32_t QUEUE_SIZE = 100U;
+	static const uint32_t RETRIES = 5U;
+	static const uint32_t WINDOW_SIZE = 2U;
+	static const uint32_t SEGMENT_SIZE = WINDOW_SIZE * 3U;
+
+	static const uint32_t QUEUE_SIZE = 30U;
 	static const uint32_t LLL_TX_QUEUE_SIZE = QUEUE_SIZE;
 	static const uint32_t LLL_RX_QUEUE_SIZE = QUEUE_SIZE;
 
 	static const uint32_t ULL_RX_QUEUE_SIZE = QUEUE_SIZE;
 	static const uint32_t ULL_TX_QUEUE_SIZE = QUEUE_SIZE;
 
+
 	static std::vector<BIT> start_seq;
 	static std::vector<BIT> end_seq;
 };
 
 enum pdu_type {
-	PDU_DATA_REQ = 0x00,
-	PDU_DATA,
+	PDU_DATA = 0x00,
 	PDU_ACK,
 	PDU_NACK,
 };
@@ -60,7 +62,10 @@ struct ll_pdu {
 struct ll_dev {
 
 	/* Transmission */
-	uint8_t curr_seq;
+	uint8_t tx_seq;
+	uint8_t rx_seq;
+
+
 	
 
 	/* LLL */

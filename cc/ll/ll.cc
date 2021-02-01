@@ -11,12 +11,13 @@
 void ll_init(ll_dev &dev, uint32_t send_channel, uint32_t recv_channel)
 {
 	/* Set the seq number start */
-	dev.curr_seq = 0U;
+    dev.rx_seq = 0U;
+	dev.tx_seq = 0U;
 
 	/* Init phy device */
 	init_phy_dev(dev.phy_config, send_channel, recv_channel);
 
-	ull_start(dev);
+	ull_init(dev);
 }
 
 void ll_clear(ll_dev &dev)
@@ -25,13 +26,14 @@ void ll_clear(ll_dev &dev)
 	ull_clear(dev);
 
     /* Now reset everyting in dev */
-    dev.curr_seq = 0U;
+    dev.rx_seq = 0U;
+	dev.tx_seq = 0U;
 }
 
 bool ll_send(ll_dev &dev, std::vector<uint8_t> &data)
 {
 	bool ret = false;
-
+	
 	/* Check if there is space */
 	if (dev.ull_tx_queue.size() < LLConfig::ULL_TX_QUEUE_SIZE) {
 		/* Prepare pachet for ull */
@@ -52,7 +54,7 @@ bool ll_recv(ll_dev &dev, std::vector<uint8_t> &data)
 {
 	bool ret = false;
     ll_pdu pdu;
-
+	// std::cout << "Try pop\n";
 	if (dev.ull_rx_queue.try_pop(pdu)) {
         
 		/* Invoke copy */
